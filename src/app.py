@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+from threading import Lock
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -77,6 +78,8 @@ activities = {
     }
 }
 
+participants_lock = Lock()
+
 
 @app.get("/")
 def root():
@@ -98,12 +101,13 @@ def signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
-    # Validate that student is not already signed up for activity
-    if email in activity["participants"]:
-        raise HTTPException(status_code=400, detail="Student already signed up for this activity")
-    
-    # Add student
-    activity["participants"].append(email)
+    with participants_lock:
+        # Validate that student is not already signed up for activity
+        if email in activity["participants"]:
+            raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+
+        # Add student
+        activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
@@ -113,9 +117,10 @@ def unregister_from_activity(activity_name: str, email: str):
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    participants = activities[activity_name]["participants"]
-    if email not in participants:
-        raise HTTPException(status_code=404, detail="Student is not signed up for this activity")
+    with participants_lock:
+        participants = activities[activity_name]["participants"]
+        if email not in participants:
+            raise HTTPException(status_code=404, detail="Student is not signed up for this activity")
 
-    participants.remove(email)
+        participants.remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}

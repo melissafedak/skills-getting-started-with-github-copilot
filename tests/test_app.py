@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -73,6 +75,22 @@ def test_signup_rejects_duplicate_participant(client):
     # Assert
     assert response.status_code == 400
     assert response.json() == {"detail": "Student already signed up for this activity"}
+
+
+def test_concurrent_signup_rejects_duplicate_participant(client, activities):
+    email = "new@mergington.edu"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(
+            lambda _: client.post(
+                "/activities/Chess%20Club/signup",
+                params={"email": email},
+            ),
+            range(2),
+        ))
+
+    assert sorted(response.status_code for response in responses) == [200, 400]
+    assert activities["Chess Club"]["participants"].count(email) == 1
 
 
 def test_signup_returns_not_found_for_unknown_activity(client):
